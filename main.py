@@ -18,7 +18,9 @@ LOG_QUEUE = Queue()
 
 
 @eel.expose
-def html_code_for_all_tables():
+def get_table_names():
+    """Gets all names of tables in database"""
+
     conn = pyodbc.connect(CONNECTION)
     cursor = conn.cursor()
     try:
@@ -31,18 +33,18 @@ def html_code_for_all_tables():
         conn.close()
         return {'error': 'Ошибка подключения к БД.'}
     conn.close()
-    code = ''
-    for table in tables:
-        code += f'<a class="dropdown-item" onclick="display_table(`{table[0]}`)">{table[0]}</a>'
-    return {'error': None, 'code': code}
+    table_names = [x[0] for x in tables]
+    return {'error': None, 'table_names': table_names}
 
 
 @eel.expose
-def html_code_for_table(table_name, where=''):
+def load_table(table_name, where=''):
+    """Collects all required data for chosen table"""
+
     conn = pyodbc.connect(CONNECTION)
     cursor = conn.cursor()
 
-    # fill column headers
+    # get column headers
     try:
         request = f'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = \'{table_name}\''
         cursor.execute(request)
@@ -53,13 +55,6 @@ def html_code_for_table(table_name, where=''):
         conn.close()
         return {'error': 'Ошибка подключения к БД.'}
     column_headers = [x[0] for x in column_headers]
-    table_code = '<thead><tr>'
-    i = 0
-    for column in column_headers:
-        table_code += f'<th scope="col" onclick="sortTable({i})">{column}</th>'
-        i += 1
-    table_code += f'<th scope="col">Удалить</th>'
-    table_code += '</tr></thead>'
 
     # get linked tables
     request = f"SELECT QUOTENAME(PK.TABLE_NAME) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE PK " +\
@@ -70,6 +65,7 @@ def html_code_for_table(table_name, where=''):
               f"PK.ORDINAL_POSITION=FK.ORDINAL_POSITION WHERE FK.TABLE_CATALOG='{DB}' AND FK.TABLE_NAME='{table_name}'"
     cursor.execute(request)
     linked_tables = cursor.fetchall()
+    linked_tables = [x[0][1:-1] for x in linked_tables]
 
     # fill column data
     try:
@@ -88,9 +84,10 @@ def html_code_for_table(table_name, where=''):
             conn.close()
             return {'error': 'Ошибка подключения к БД.'}
     conn.close()
-    table_code += '<tbody>'
+
+    table_data = []
     for row in data:
-        table_code += '<tr>'
+        row_data = []
         id = row[0]
         i = 0
         for block in row:
@@ -98,36 +95,18 @@ def html_code_for_table(table_name, where=''):
                 block = "NULL"
             changed_column = column_headers[i]
             update_query = f"{changed_column}:{column_headers[0]} = !{id}!"
-            table_code += f'<td onclick="update(\'{update_query}\')">{block}</td>'
+            block_data = {'update_query': update_query, 'block': block}
             i += 1
-        table_code += f'<td><button onclick="del(\'{id}\')" type="button" class="btn btn-danger">X</button></td>'
-        table_code += '</tr>'
+            row_data.append(block_data)
+        table_data.append(row_data)
 
-    # add empty row for add function
-    table_code += '<tr id="added_items">'
-    table_code += '<td>#</td>'
-    for i in range(len(column_headers) - 1):
-        table_code += '<td> <input class="form-control" placeholder="NULL"> </td>'
-    table_code += '</tr>'
-    table_code += '</tbody>'
-
-    # dropdown_search_button code
-    dropdown = ''
-    for column in column_headers:
-        dropdown += f'<a class="dropdown-item" onclick="handle_search_dropdown(\'{column}\')">{column}</a>'
-
-    # constraint_dropdown
-    dropdown1 = ''
-    if len(linked_tables) > 0:
-        for item in linked_tables:
-            dropdown1 += f'<a class="dropdown-item" onclick="new_window(\'{item[0][1:-1]}\')">{item[0][1:-1]}</a>'
-    else:
-        dropdown1 += f'<a class="dropdown-item">Связанных таблиц нет</a>'
-    return {'code': table_code, 'dropdown': dropdown, 'headers': column_headers, 'drop': dropdown1}
+    return {'table_data': table_data, 'headers': column_headers, 'linked_tables': linked_tables}
 
 
 @eel.expose
 def add(table, columns, values):
+    """Add data to DB"""
+
     conn = pyodbc.connect(CONNECTION)
     cursor = conn.cursor()
     columns.pop(0)
@@ -164,6 +143,8 @@ def add(table, columns, values):
 
 @eel.expose
 def add_several(amount, value):
+    """Execution of procedure insertProducts, which adds item several times"""
+
     conn = pyodbc.connect(CONNECTION)
     cursor = conn.cursor()
     try:
@@ -181,6 +162,8 @@ def add_several(amount, value):
 
 @eel.expose
 def update(query, table_name, value):
+    """Entry update function"""
+
     conn = pyodbc.connect(CONNECTION)
     if value != 'NULL':
         value = f'\'{value}\''
@@ -216,6 +199,8 @@ def update(query, table_name, value):
 
 @eel.expose
 def delete(table, column, id):
+    """Entry delete function"""
+
     conn = pyodbc.connect(CONNECTION)
     cursor = conn.cursor()
     try:
@@ -232,6 +217,8 @@ def delete(table, column, id):
 
 
 def validate(columns, values):
+    """Validation of certain values of columns in DB"""
+
     if isinstance(columns, str) and isinstance(values, str):
         columns = [columns]
         values = [values]
@@ -249,19 +236,25 @@ def validate(columns, values):
 
 @eel.expose
 def new_window(table):
+    """Open new window displaying linked table"""
+
     global TABLE, PORT
     TABLE = table
     PORT += 1
     eel.init(Path(__file__).parent / 'view')
-    eel.start('view2.html', port=(PORT - 1))
+    eel.start('view.html', port=(PORT - 1))
 
 
 @eel.expose
 def give_table():
+    """Return currently used table to view"""
+
     return TABLE
 
 
 def expiration_daemon():
+    """Daemon, deleting all expired items (via stored procedure) every period of time, specified in DAEMO_FREQUENCY"""
+
     while True:
         conn = pyodbc.connect(CONNECTION)
         cursor = conn.cursor()

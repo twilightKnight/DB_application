@@ -82,36 +82,40 @@
     let headers = [];
 
     window.onload = async function(){
-        var response = await eel.html_code_for_all_tables()();
+        const response = await eel.get_table_names()();
         if (response.error){
             alert(response.error);
         } else{
-            document.getElementById("dropdown").innerHTML = response.code;
+            document.getElementById("dropdown").innerHTML = generate_choose_table_dropdown_html(response.table_names);
         }
     }
+
     async function display_table(table_name){
         window.const_table_name = table_name;
         document.getElementById("dropdownMenuButton").innerHTML = table_name;
-        var response = await eel.html_code_for_table(table_name)();
+        const response = await eel.load_table(table_name)();
         if (response.error){
             alert(response.error);
         } else {
             window.headers = response.headers;
-            document.getElementById("table").innerHTML = response.code;
-            display_search_form(response.dropdown);
-            if (table_name == 'Кjоробки' || table_name == 'Товары'){
+            document.getElementById("table").innerHTML = generate_table_header_html(response.headers)
+                + generate_table_body_html(response.table_data);
+            display_search_form(generate_search_button_dropdown_html());
+            if (table_name == 'Товары'){
                 document.getElementById("add_button").innerHTML = add_several_button;
             } else {
                 document.getElementById("add_button").innerHTML = add_button;
             }
             document.getElementById("tmp").innerHTML = drop;
-            document.getElementById("dropdown1").innerHTML = response.drop;
+            document.getElementById("dropdown1").innerHTML =
+                generate_linked_tables_dropdown_html(response.linked_tables);
         }
     }
+
     async function update(update_query){
-        var value = prompt('Введите новое значение.');
+        const value = prompt('Введите новое значение.');
         if (value != null){
-            var response = await eel.update(update_query, window.const_table_name, value)();
+            const response = await eel.update(update_query, window.const_table_name, value)();
             if (response.error){
                 alert(response.error);
             } else {
@@ -120,11 +124,12 @@
             }
         }
     }
+
     async function search(){
         let column = document.getElementById("dropdown_button").value;
         let value = document.getElementById("search_value").value;
         let where = " where " + column + " = '" + value + "'";
-        var response = await eel.html_code_for_table(window.const_table_name, where)();
+        const response = await eel.html_code_for_table(window.const_table_name, where)();
         if (response.error){
             alert(response.error);
         } else {
@@ -132,12 +137,13 @@
             display_search_form(response.dropdown);
         }
     }
+
     async function add(){
         let values = [];
         for (let i = 1; i < (window.headers.length); i += 1){
             values.push(document.getElementById("added_items").cells[i].children[0].value);
         };
-        var response = await eel.add(window.const_table_name, window.headers, values)();
+        const response = await eel.add(window.const_table_name, window.headers, values)();
         if (response.error){
             alert(response.error);
         } else {
@@ -145,10 +151,11 @@
             alert('Данные успешно добавлены.');
         }
     }
+
     async function add_several(){
-        var amount = document.getElementById("add_value").value;
+        const amount = document.getElementById("add_value").value;
         let value = document.getElementById("added_items").cells[2].children[0].value;
-        var response = await eel.add_several(amount, value)();
+        const response = await eel.add_several(amount, value)();
         if (response.error){
             alert(response.error);
         } else {
@@ -156,10 +163,11 @@
             alert('Данные успешно добавлены.');
         }
     }
+
     async function del(id){
-        var confirmation = confirm('Вы действительно хотите удалить запись?')
+        const confirmation = confirm('Вы действительно хотите удалить запись?');
         if (confirmation){
-            var response = await eel.delete(window.const_table_name, window.headers[0], id)();
+            const response = await eel.delete(window.const_table_name, window.headers[0], id)();
             if (response.error){
                 alert(response.error);
             } else {
@@ -173,7 +181,6 @@
         await eel.new_window(table)();
     }
 
-
     function display_search_form(dropdown_code){
         document.getElementById("search_form").innerHTML = search_html;
         document.getElementById("search_dropdown").innerHTML = dropdown_code;
@@ -182,27 +189,121 @@
         document.getElementById("dropdown_button").value = column;
     }
 
-    var drop = `                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton1" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                Выберите связанную таблицу для отображения
-                </button>
-            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton" id="dropdown1">
-                <a class="dropdown-item">Таблицы загружаются...</a>
-            </div>`;
+    function sortTable(n) {
+        let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("table");
+        switching = true;
+        // Set the sorting direction to ascending:
+        dir = "asc";
+        /* Make a loop that will continue until
+        no switching has been done: */
+        while (switching) {
+        // Start by saying: no switching is done:
+        switching = false;
+        rows = table.rows;
+        /* Loop through all table rows (except the
+        first, which contains table headers): */
+        for (i = 1; i < (rows.length - 2); i++) {
+          // Start by saying there should be no switching:
+          shouldSwitch = false;
+          /* Get the two elements you want to compare,
+          one from current row and one from the next: */
+          x = rows[i].getElementsByTagName("TD")[n];
+          y = rows[i + 1].getElementsByTagName("TD")[n];
+          /* Check if the two rows should switch place,
+          based on the direction, asc or desc: */
+          if (dir == "asc") {
+            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+              // If so, mark as a switch and break the loop:
+              shouldSwitch = true;
+              break;
+            }
+          } else if (dir == "desc") {
+            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+              // If so, mark as a switch and break the loop:
+              shouldSwitch = true;
+              break;
+            }
+          }
+        }
+        if (shouldSwitch) {
+          /* If a switch has been marked, make the switch
+          and mark that a switch has been done: */
+          rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+          switching = true;
+          // Each time a switch is done, increase this count by 1:
+          switchcount ++;
+        } else {
+          /* If no switching has been done AND the direction is "asc",
+          set the direction to "desc" and run the while loop again. */
+          if (switchcount == 0 && dir == "asc") {
+            dir = "desc";
+            switching = true;
+          }
+        }
+    }
+}
 
-    var add_button = `            <div class="col-5">
-            <button type="button" class="btn btn-primary" onclick="add()">Добавить</button>
-            </div>`;
+    function generate_choose_table_dropdown_html(table_names){
+        let html = '';
+        for (name of table_names){
+            html += '<a class="dropdown-item" onclick="display_table(`' + name + '`)">' + name + '</a>';
+        }
+        return html
+    }
 
-    var add_several_button = `            <div class="col-5">
-            <button type="button" class="btn btn-primary" onclick="add_several()">Добавить несколько</button>
-            </div>
-            <div class="col-3">
-            <input class="form-control" value="1" id="add_value">
-            </div>
-            <div class="col-4">
-            </div>`;
+    function generate_table_header_html(headers){
+        let html = '<thead><tr>';
+        let i = 0;
+        for (header of headers){
+            html += '<th scope="col" onclick="sortTable(' + i + ')">' + header + '</th>'
+        }
+        html += '<th scope="col">Удалить</th>';
+        html += '</tr></thead>';
+        return html
+    }
 
-    var search_html = `            <div class="col">
+    function generate_table_body_html(table_data){
+        let html = '<tbody>';
+        for (row_data of table_data){
+            let i = 0;
+            html += '<tr>';
+            for (block_data of row_data){
+                html += '<td onclick="update(' + block_data.update_query + ')">' + block_data.block + '</td>'
+            }
+            html += '<td><button onclick="del(' + i + ')" type="button" class="btn btn-danger">X</button></td>';
+            html += '</tr>';
+        }
+        html += '<tr id="added_items">';
+        html += '<td>#</td>';
+        for (item of window.headers){
+            html += '<td> <input class="form-control" placeholder="NULL"> </td>';
+        }
+        html += '</tr>';
+        html += '</tbody>';
+        return html
+    }
+
+    function generate_search_button_dropdown_html(){
+        html = '';
+        for (column of window.headers){
+            html += '<a class="dropdown-item" onclick="handle_search_dropdown(\'' + column + '\')">' + column + '</a>';
+        }
+        return html
+    }
+
+    function generate_linked_tables_dropdown_html(linked_tables){
+        html = '';
+        if (linked_tables.length == 0){
+            html += '<a class="dropdown-item">Связанных таблиц нет</a>';
+            return html
+        }
+        for (table_name of linked_tables){
+            html += '<a class="dropdown-item" onclick="new_window(\'' + table_name + '\')">' + table_name + '</a>'
+        }
+    }
+
+    const search_html = `            <div class="col">
 
         <div class="dropdown">
                 <input value="Выберите колонку для поиска" class="btn btn-secondary dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" id="dropdown_button">
@@ -219,59 +320,24 @@
                 <button type="button" class="btn btn-primary" onclick="search()">Поиск</button>
             </div>`;
 
-    function sortTable(n) {
-  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-  table = document.getElementById("table");
-  switching = true;
-  // Set the sorting direction to ascending:
-  dir = "asc";
-  /* Make a loop that will continue until
-  no switching has been done: */
-  while (switching) {
-    // Start by saying: no switching is done:
-    switching = false;
-    rows = table.rows;
-    /* Loop through all table rows (except the
-    first, which contains table headers): */
-    for (i = 1; i < (rows.length - 2); i++) {
-      // Start by saying there should be no switching:
-      shouldSwitch = false;
-      /* Get the two elements you want to compare,
-      one from current row and one from the next: */
-      x = rows[i].getElementsByTagName("TD")[n];
-      y = rows[i + 1].getElementsByTagName("TD")[n];
-      /* Check if the two rows should switch place,
-      based on the direction, asc or desc: */
-      if (dir == "asc") {
-        if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
-          // If so, mark as a switch and break the loop:
-          shouldSwitch = true;
-          break;
-        }
-      } else if (dir == "desc") {
-        if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
-          // If so, mark as a switch and break the loop:
-          shouldSwitch = true;
-          break;
-        }
-      }
-    }
-    if (shouldSwitch) {
-      /* If a switch has been marked, make the switch
-      and mark that a switch has been done: */
-      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-      switching = true;
-      // Each time a switch is done, increase this count by 1:
-      switchcount ++;
-    } else {
-      /* If no switching has been done AND the direction is "asc",
-      set the direction to "desc" and run the while loop again. */
-      if (switchcount == 0 && dir == "asc") {
-        dir = "desc";
-        switching = true;
-      }
-    }
-  }
-}
+    const drop = `                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton1" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    Выберите связанную таблицу для отображения
+                    </button>
+                <div class="dropdown-menu" aria-labelledby="dropdownMenuButton" id="dropdown1">
+                    <a class="dropdown-item">Таблицы загружаются...</a>
+                </div>`;
+
+    const add_button = `            <div class="col-5">
+            <button type="button" class="btn btn-primary" onclick="add()">Добавить</button>
+            </div>`;
+
+    const add_several_button = `            <div class="col-5">
+            <button type="button" class="btn btn-primary" onclick="add_several()">Добавить несколько</button>
+            </div>
+            <div class="col-3">
+            <input class="form-control" value="1" id="add_value">
+            </div>
+            <div class="col-4">
+            </div>`;
 </script>
 </html>
